@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version)",
+      "Bash(dotnet --list-sdks)",
+      "Bash(dotnet new *)",
+      "Bash(dotnet sln *)",
+      "Bash(dotnet add *)",
+      "Bash(rm -f src/Domain/Class1.cs src/Infrastructure/Class1.cs)",
+      "Bash(dotnet package *)",
+      "Bash(dotnet run *)",
+      "Bash(grep -vE \"warning|Determinando|restaurado|restaura|Compila|bem-sucedid|^\\\\s*$|MSBuild|decorrido\")",
+      "Bash(dotnet build *)"
+    ]
+  }
+}

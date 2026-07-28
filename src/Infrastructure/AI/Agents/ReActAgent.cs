@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Anthropic.SDK;
-using Anthropic.SDK.Messaging;
 using Domain.AI.Agents;
+using Domain.AI.LLM;
 using Domain.AI.Tools;
 using Microsoft.Extensions.Logging;
 
@@ -18,11 +17,11 @@ namespace Infrastructure.AI.Agents;
 /// </summary>
 public sealed class ReActAgent
 {
-    private readonly AnthropicClient           _client;
-    private readonly IToolRegistry             _registry;
+    private readonly ILLMClient               _client;
+    private readonly IToolRegistry            _registry;
     private readonly IToolAuthorizationService _authService;
-    private readonly IAgentObserver            _observer;
-    private readonly ILogger<ReActAgent>       _logger;
+    private readonly IAgentObserver           _observer;
+    private readonly ILogger<ReActAgent>      _logger;
 
     private const string Model         = "claude-sonnet-4-6";
     private const int    MaxIterations = 8;
@@ -43,7 +42,7 @@ public sealed class ReActAgent
         """;
 
     public ReActAgent(
-        AnthropicClient           client,
+        ILLMClient                client,
         IToolRegistry             registry,
         IToolAuthorizationService authService,
         IAgentObserver            observer,
@@ -71,33 +70,27 @@ public sealed class ReActAgent
         // Camada 1: Visibilidade — LLM vê apenas tools autorizadas
         var visibleTools = _authService.FilterVisible(_registry.GetDefinitions(), context);
 
-        var tools = visibleTools.Select(t => new Anthropic.SDK.Common.Tool(
-            new Anthropic.SDK.Common.Function(t.Name, t.Description, t.InputSchema))).ToList();
+        var tools = visibleTools
+            .Select(t => new LLMToolDefinition(t.Name, t.Description, t.InputSchema))
+            .ToList();
 
-        var messages = new List<Message>
-        {
-            new(RoleType.User, goal)
-        };
+        var messages = new List<LLMMessage> { LLMMessage.User(goal) };
 
         for (int iter = 0; iter < MaxIterations && !state.IsComplete; iter++)
         {
-            var response = await _client.Messages.GetClaudeMessageAsync(
-                new MessageParameters
-                {
-                    Model     = Model,
-                    MaxTokens = 4096,
-                    System    = [new SystemMessage(SystemPrompt)],
-                    Tools     = tools.Count > 0 ? tools : null,
-                    Messages  = messages
-                }, ct);
+            var response = await _client.CompleteAsync(new LLMRequest
+            {
+                Model     = Model,
+                MaxTokens = 4096,
+                System    = SystemPrompt,
+                Tools     = tools.Count > 0 ? tools : null,
+                Messages  = messages
+            }, ct);
 
-            messages.Add(new Message { Role = RoleType.Assistant, Content = response.Content });
+            messages.Add(LLMMessage.Assistant(response.Content));
 
             // ── THOUGHT ──────────────────────────────────────────────────
-            var thoughtText = response.Content
-                .OfType<TextContent>()
-                .Select(b => b.Text)
-                .FirstOrDefault();
+            var thoughtText = response.Text;
 
             if (!string.IsNullOrWhiteSpace(thoughtText))
             {
@@ -121,8 +114,8 @@ public sealed class ReActAgent
             if (response.StopReason != "tool_use") break;
 
             // ── ACTION + OBSERVATION ──────────────────────────────────────
-            var toolUseBlocks = response.Content.OfType<ToolUseContent>().ToList();
-            var toolResults   = new List<ToolResultContent>(toolUseBlocks.Count);
+            var toolUseBlocks = response.ToolUses.ToList();
+            var toolResults   = new List<LLMToolResult>(toolUseBlocks.Count);
 
             foreach (var toolUse in toolUseBlocks)
             {
@@ -179,18 +172,10 @@ public sealed class ReActAgent
                 state = state.WithStep(observationStep);
                 await _observer.OnStepAsync(state, observationStep, ct);
 
-                toolResults.Add(new ToolResultContent
-                {
-                    ToolUseId = toolUse.Id,
-                    Content   = [new TextContent { Text = observationContent }]
-                });
+                toolResults.Add(new LLMToolResult(toolUse.Id, observationContent));
             }
 
-            messages.Add(new Message
-            {
-                Role    = RoleType.User,
-                Content = toolResults.Cast<ContentBase>().ToList()
-            });
+            messages.Add(LLMMessage.ToolResults(toolResults));
         }
 
         // Circuit breaker — MaxIterations atingido

@@ -1,14 +1,13 @@
 using System.Text.Json;
-using Anthropic.SDK;
-using Anthropic.SDK.Messaging;
 using Domain.AI.Agents;
+using Domain.AI.LLM;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.AI.Agents;
 
 public sealed class ReflectionAgent
 {
-    private readonly AnthropicClient          _client;
+    private readonly ILLMClient               _client;
     private readonly IAgentObserver           _observer;
     private readonly ILogger<ReflectionAgent> _logger;
 
@@ -52,7 +51,7 @@ public sealed class ReflectionAgent
         """;
 
     public ReflectionAgent(
-        AnthropicClient          client,
+        ILLMClient               client,
         IAgentObserver           observer,
         ILogger<ReflectionAgent> logger)
     {
@@ -117,19 +116,15 @@ public sealed class ReflectionAgent
 
     private async Task<string> GenerateAsync(ReflectionState state, CancellationToken ct)
     {
-        var response = await _client.Messages.GetClaudeMessageAsync(
-            new MessageParameters
-            {
-                Model     = GeneratorModel,
-                MaxTokens = 2048,
-                System    = [new SystemMessage(GeneratorSystemPrompt)],
-                Messages  =
-                [
-                    new(RoleType.User, BuildGeneratorPrompt(state))
-                ]
-            }, ct);
+        var response = await _client.CompleteAsync(new LLMRequest
+        {
+            Model     = GeneratorModel,
+            MaxTokens = 2048,
+            System    = GeneratorSystemPrompt,
+            Messages  = [LLMMessage.User(BuildGeneratorPrompt(state))]
+        }, ct);
 
-        return response.Content.OfType<TextContent>().FirstOrDefault()?.Text
+        return response.Text
             ?? throw new InvalidOperationException("Generator retornou resposta vazia.");
     }
 
@@ -167,25 +162,24 @@ public sealed class ReflectionAgent
         string            draft,
         CancellationToken ct)
     {
-        var response = await _client.Messages.GetClaudeMessageAsync(
-            new MessageParameters
-            {
-                Model     = CriticModel,
-                MaxTokens = 1024,
-                System    = [new SystemMessage(CriticSystemPrompt)],
-                Messages  =
-                [
-                    new(RoleType.User, $"""
-                        OBJETIVO QUE O ANALISTA DEVERIA ATINGIR:
-                        {goal}
+        var response = await _client.CompleteAsync(new LLMRequest
+        {
+            Model     = CriticModel,
+            MaxTokens = 1024,
+            System    = CriticSystemPrompt,
+            Messages  =
+            [
+                LLMMessage.User($"""
+                    OBJETIVO QUE O ANALISTA DEVERIA ATINGIR:
+                    {goal}
 
-                        DRAFT DO ANALISTA PARA AVALIAÇÃO:
-                        {draft}
-                        """)
-                ]
-            }, ct);
+                    DRAFT DO ANALISTA PARA AVALIAÇÃO:
+                    {draft}
+                    """)
+            ]
+        }, ct);
 
-        var rawJson = response.Content.OfType<TextContent>().FirstOrDefault()?.Text
+        var rawJson = response.Text
             ?? throw new InvalidOperationException("Critic retornou resposta vazia.");
 
         return ParseCriticFeedback(rawJson);

@@ -1,12 +1,14 @@
 using Anthropic.SDK;
 using Domain.AI.Agents;
 using Domain.AI.Harness;
+using Domain.AI.LLM;
 using Domain.AI.RAG;
 using Domain.AI.Routing;
 using Domain.AI.Tools;
 using Infrastructure.AI.Agents;
 using Infrastructure.AI.Authorization;
 using Infrastructure.AI.Harness;
+using Infrastructure.AI.LLM;
 using Infrastructure.AI.Mcp;
 using Infrastructure.AI.RAG;
 using Infrastructure.AI.Routing;
@@ -25,16 +27,25 @@ public static class ServiceCollectionExtensions
         IConfiguration          config)
     {
         // ── LLM Client ────────────────────────────────────────────────────
-        services.AddSingleton(_ =>
+        if (config.GetValue("LLM:UseFake", defaultValue: false))
         {
-            var apiKey = config["Anthropic:ApiKey"];
-            if (string.IsNullOrWhiteSpace(apiKey))
-                apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
-            if (string.IsNullOrWhiteSpace(apiKey))
-                throw new InvalidOperationException(
-                    "Anthropic:ApiKey não configurada (defina em appsettings.json ou na variável ANTHROPIC_API_KEY)");
-            return new AnthropicClient(new APIAuthentication(apiKey));
-        });
+            services.AddSingleton<FakeLLMClient>();
+            services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<FakeLLMClient>());
+        }
+        else
+        {
+            services.AddSingleton(_ =>
+            {
+                var apiKey = config["Anthropic:ApiKey"];
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+                if (string.IsNullOrWhiteSpace(apiKey))
+                    throw new InvalidOperationException(
+                        "Anthropic:ApiKey não configurada (defina em appsettings.json ou na variável ANTHROPIC_API_KEY)");
+                return new AnthropicClient(new APIAuthentication(apiKey));
+            });
+            services.AddSingleton<ILLMClient, AnthropicLLMClient>();
+        }
 
         // ── Módulo 3.2 — Authorization ────────────────────────────────────
         services.AddSingleton<IToolPolicy>(_ =>

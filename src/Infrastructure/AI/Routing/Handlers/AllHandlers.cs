@@ -1,5 +1,4 @@
-using Anthropic.SDK;
-using Anthropic.SDK.Messaging;
+using Domain.AI.LLM;
 using Domain.AI.Routing;
 using Domain.AI.Tools;
 using Infrastructure.AI.Agents;
@@ -81,10 +80,10 @@ public sealed class AnalyzeHandler : IAgentHandler
 /// </summary>
 public sealed class SummarizeHandler : IAgentHandler
 {
-    private readonly AnthropicClient           _client;
+    private readonly ILLMClient                _client;
     private readonly ILogger<SummarizeHandler> _logger;
 
-    public SummarizeHandler(AnthropicClient client, ILogger<SummarizeHandler> logger)
+    public SummarizeHandler(ILLMClient client, ILogger<SummarizeHandler> logger)
     {
         _client = client;
         _logger = logger;
@@ -100,17 +99,15 @@ public sealed class SummarizeHandler : IAgentHandler
         ToolExecutionContext context,
         CancellationToken    ct = default)
     {
-        var response = await _client.Messages.GetClaudeMessageAsync(
-            new MessageParameters
-            {
-                Model     = "claude-haiku-4-5-20251001",
-                MaxTokens = 1024,
-                System    = [new SystemMessage("Você é um assistente de resumo de operações PSP. Seja conciso e objetivo.")],
-                Messages  = [new(RoleType.User, input)]
-            }, ct);
+        var response = await _client.CompleteAsync(new LLMRequest
+        {
+            Model     = "claude-haiku-4-5-20251001",
+            MaxTokens = 1024,
+            System    = "Você é um assistente de resumo de operações PSP. Seja conciso e objetivo.",
+            Messages  = [LLMMessage.User(input)]
+        }, ct);
 
-        var output = response.Content.OfType<TextContent>().FirstOrDefault()?.Text
-            ?? "Resumo indisponível.";
+        var output = response.Text ?? "Resumo indisponível.";
 
         return new RoutedResponse
         {

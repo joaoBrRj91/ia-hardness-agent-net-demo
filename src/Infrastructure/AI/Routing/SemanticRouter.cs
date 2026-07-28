@@ -1,6 +1,5 @@
 using System.Text.Json;
-using Anthropic.SDK;
-using Anthropic.SDK.Messaging;
+using Domain.AI.LLM;
 using Domain.AI.Routing;
 using Domain.AI.Tools;
 using Infrastructure.AI.Routing.Handlers;
@@ -10,10 +9,10 @@ namespace Infrastructure.AI.Routing;
 
 public sealed class SemanticRouter
 {
-    private readonly AnthropicClient              _client;
+    private readonly ILLMClient                _client;
     private readonly IReadOnlyList<IAgentHandler> _handlers;
-    private readonly FallbackHandler              _fallback;
-    private readonly ILogger<SemanticRouter>      _logger;
+    private readonly FallbackHandler           _fallback;
+    private readonly ILogger<SemanticRouter>   _logger;
 
     private const string RouterModel = "claude-haiku-4-5-20251001";
 
@@ -41,7 +40,7 @@ public sealed class SemanticRouter
         """;
 
     public SemanticRouter(
-        AnthropicClient            client,
+        ILLMClient                 client,
         IEnumerable<IAgentHandler> handlers,
         FallbackHandler            fallback,
         ILogger<SemanticRouter>    logger)
@@ -99,16 +98,15 @@ public sealed class SemanticRouter
 
     private async Task<RouteDecision> ClassifyAsync(string input, CancellationToken ct)
     {
-        var response = await _client.Messages.GetClaudeMessageAsync(
-            new MessageParameters
-            {
-                Model     = RouterModel,
-                MaxTokens = 512,
-                System    = [new SystemMessage(RouterSystemPrompt)],
-                Messages  = [new(RoleType.User, input)]
-            }, ct);
+        var response = await _client.CompleteAsync(new LLMRequest
+        {
+            Model     = RouterModel,
+            MaxTokens = 512,
+            System    = RouterSystemPrompt,
+            Messages  = [LLMMessage.User(input)]
+        }, ct);
 
-        var rawJson = response.Content.OfType<TextContent>().FirstOrDefault()?.Text
+        var rawJson = response.Text
             ?? throw new InvalidOperationException("Router retornou resposta vazia.");
 
         try

@@ -12,6 +12,8 @@ public sealed class FakeLLMClient : ILLMClient
         foreach (var r in responses) _queue.Enqueue(r);
     }
 
+    public void LoadScenario(string name) => Enqueue(FakeScenarios.Get(name));
+
     public Task<LLMResponse> CompleteAsync(LLMRequest request, CancellationToken ct = default)
     {
         if (_queue.TryDequeue(out var queued))

@@ -1,4 +1,4 @@
-# hardness-ai-complete — MOD4 Agentic Design Patterns (.NET 10)
+# hardness-ai-complete — Agentic Design Patterns (.NET 10)
 
 Implementação executável dos padrões agentic descritos em [`complete_code.md`](./complete_code.md):
 **ReAct**, **Reflection (Generator + Critic)**, **Semantic Routing** e um **Harness** (facade)

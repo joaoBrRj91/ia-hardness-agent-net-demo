@@ -30,7 +30,14 @@ public static class ServiceCollectionExtensions
         if (config.GetValue("LLM:UseFake", defaultValue: false))
         {
             services.AddSingleton<FakeLLMClient>();
-            services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<FakeLLMClient>());
+            services.AddSingleton<ILLMClient>(sp =>
+            {
+                var fake     = sp.GetRequiredService<FakeLLMClient>();
+                var scenario = config["LLM:FakeScenario"];
+                if (!string.IsNullOrWhiteSpace(scenario))
+                    fake.LoadScenario(scenario);
+                return fake;
+            });
         }
         else
         {

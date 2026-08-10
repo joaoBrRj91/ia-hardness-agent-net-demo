@@ -4,3 +4,4 @@ obj/
 .vs/
 .idea/
 appsettings.*.local.json
+.env

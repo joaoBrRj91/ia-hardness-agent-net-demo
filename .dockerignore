@@ -1,0 +1,11 @@
+**/bin
+**/obj
+.git
+.vs
+.claude
+Docs
+deploy
+docker-compose.yml
+.env
+.env.example
+*.md

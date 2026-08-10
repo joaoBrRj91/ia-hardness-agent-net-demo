@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Domain.AI.Agents;
 using Domain.AI.LLM;
+using Infrastructure.AI.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.AI.Agents;
@@ -9,6 +10,8 @@ public sealed class ReflectionAgent
 {
     private readonly ILLMClient               _client;
     private readonly IAgentObserver           _observer;
+    private readonly IAgentDiagnostics        _diagnostics;
+    private readonly TokenUsageAccumulator    _usage;
     private readonly ILogger<ReflectionAgent> _logger;
 
     private const string GeneratorModel      = "claude-sonnet-4-6";
@@ -53,11 +56,15 @@ public sealed class ReflectionAgent
     public ReflectionAgent(
         ILLMClient               client,
         IAgentObserver           observer,
+        IAgentDiagnostics        diagnostics,
+        TokenUsageAccumulator    usage,
         ILogger<ReflectionAgent> logger)
     {
-        _client   = client;
-        _observer = observer;
-        _logger   = logger;
+        _client      = client;
+        _observer    = observer;
+        _diagnostics = diagnostics;
+        _usage       = usage;
+        _logger      = logger;
     }
 
     public async Task<ReflectionState> RunAsync(
@@ -69,6 +76,8 @@ public sealed class ReflectionAgent
 
         for (int i = 0; i <= MaxRefinements; i++)
         {
+            using var iterSpan = _diagnostics.StartIteration(i);
+
             // ── GENERATION ────────────────────────────────────────────────
             var draft = await GenerateAsync(state, ct);
             state = state.WithDraft(draft);
@@ -116,6 +125,8 @@ public sealed class ReflectionAgent
 
     private async Task<string> GenerateAsync(ReflectionState state, CancellationToken ct)
     {
+        using var modelSpan = _diagnostics.StartModelCall(GeneratorModel, 2048);
+
         var response = await _client.CompleteAsync(new LLMRequest
         {
             Model     = GeneratorModel,
@@ -123,6 +134,8 @@ public sealed class ReflectionAgent
             System    = GeneratorSystemPrompt,
             Messages  = [LLMMessage.User(BuildGeneratorPrompt(state))]
         }, ct);
+
+        RecordModelCall(modelSpan, response, GeneratorModel);
 
         return response.Text
             ?? throw new InvalidOperationException("Generator retornou resposta vazia.");
@@ -162,6 +175,8 @@ public sealed class ReflectionAgent
         string            draft,
         CancellationToken ct)
     {
+        using var modelSpan = _diagnostics.StartModelCall(CriticModel, 1024);
+
         var response = await _client.CompleteAsync(new LLMRequest
         {
             Model     = CriticModel,
@@ -179,10 +194,25 @@ public sealed class ReflectionAgent
             ]
         }, ct);
 
+        RecordModelCall(modelSpan, response, CriticModel);
+
         var rawJson = response.Text
             ?? throw new InvalidOperationException("Critic retornou resposta vazia.");
 
         return ParseCriticFeedback(rawJson);
+    }
+
+    private void RecordModelCall(
+        System.Diagnostics.Activity? modelSpan,
+        LLMResponse                  response,
+        string                       requestModel)
+    {
+        modelSpan?.SetTag(GenAiConventions.InputTokens,   response.InputTokens);
+        modelSpan?.SetTag(GenAiConventions.OutputTokens,  response.OutputTokens);
+        modelSpan?.SetTag(GenAiConventions.ResponseModel, response.Model ?? requestModel);
+        modelSpan?.SetTag(GenAiConventions.FinishReasons, new[] { response.StopReason });
+
+        _usage.Record(response.Model ?? requestModel, response.InputTokens, response.OutputTokens);
     }
 
     private CriticFeedback ParseCriticFeedback(string rawJson)

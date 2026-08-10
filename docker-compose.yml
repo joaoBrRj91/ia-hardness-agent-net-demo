@@ -1,0 +1,94 @@
+# Stack local de observabilidade — MOD6-1.
+# Fluxo: api ──OTLP──► otel-collector ──► Jaeger (traces) / Prometheus (metrics) / Loki (logs)
+#                                          └── Grafana lê os três backends.
+#
+#   docker compose up -d --build
+#   API:        http://localhost:8080        Grafana:    http://localhost:3000 (admin/admin)
+#   Jaeger UI:  http://localhost:16686       Prometheus: http://localhost:9090
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/Api/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Otel__Endpoint: http://otel-collector:4317
+      # Offline por default (FakeLLMClient). Para API real: .env com
+      # LLM_USE_FAKE=false + ANTHROPIC_API_KEY (ver .env.example).
+      LLM__UseFake: ${LLM_USE_FAKE:-true}
+      LLM__FakeScenario: ${LLM_FAKE_SCENARIO:-react-tool-call}
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+      # Opt-in: grava prompt/completion como span events (redigidos pelo
+      # PaymentDataRedactor). NUNCA true em produção sem revisão de compliance.
+      AI__Telemetry__RecordContent: ${RECORD_CONTENT:-false}
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    # Imagem CONTRIB obrigatória: tail_sampling e file_storage não existem na core.
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    # A imagem roda como usuário não-root; o volume nomeado do file_storage é
+    # criado como root → permission denied. Local: root resolve. Em produção,
+    # ajuste a ownership do volume em vez disso.
+    user: "0:0"
+    volumes:
+      - ./deploy/otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      - otel-buffer:/var/lib/otelcol/buffer
+    ports:
+      - "4317:4317"    # OTLP gRPC (app fora do compose também pode apontar aqui)
+      - "4318:4318"    # OTLP HTTP
+      - "8889:8889"    # métricas da aplicação (scrape do Prometheus)
+      - "13133:13133"  # health check
+    depends_on:
+      - jaeger
+      - loki
+
+  jaeger:
+    image: jaegertracing/jaeger:2.9.0
+    ports:
+      - "16686:16686"  # UI (OTLP 4317/4318 ficam internos — o collector é o dono da 4317 no host)
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.5.0
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./deploy/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+
+volumes:
+  otel-buffer:
+  prometheus-data:
+  loki-data:
+  grafana-data:

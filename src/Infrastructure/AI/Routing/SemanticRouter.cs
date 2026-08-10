@@ -2,6 +2,7 @@ using System.Text.Json;
 using Domain.AI.LLM;
 using Domain.AI.Routing;
 using Domain.AI.Tools;
+using Infrastructure.AI.Observability;
 using Infrastructure.AI.Routing.Handlers;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,8 @@ public sealed class SemanticRouter
     private readonly ILLMClient                _client;
     private readonly IReadOnlyList<IAgentHandler> _handlers;
     private readonly FallbackHandler           _fallback;
+    private readonly IAgentDiagnostics         _diagnostics;
+    private readonly TokenUsageAccumulator     _usage;
     private readonly ILogger<SemanticRouter>   _logger;
 
     private const string RouterModel = "claude-haiku-4-5-20251001";
@@ -43,12 +46,16 @@ public sealed class SemanticRouter
         ILLMClient                 client,
         IEnumerable<IAgentHandler> handlers,
         FallbackHandler            fallback,
+        IAgentDiagnostics          diagnostics,
+        TokenUsageAccumulator      usage,
         ILogger<SemanticRouter>    logger)
     {
-        _client   = client;
-        _handlers = handlers.ToList();
-        _fallback = fallback;
-        _logger   = logger;
+        _client      = client;
+        _handlers    = handlers.ToList();
+        _fallback    = fallback;
+        _diagnostics = diagnostics;
+        _usage       = usage;
+        _logger      = logger;
     }
 
     public async Task<RoutedResponse> RouteAsync(
@@ -98,6 +105,8 @@ public sealed class SemanticRouter
 
     private async Task<RouteDecision> ClassifyAsync(string input, CancellationToken ct)
     {
+        using var modelSpan = _diagnostics.StartModelCall(RouterModel, 512);
+
         var response = await _client.CompleteAsync(new LLMRequest
         {
             Model     = RouterModel,
@@ -105,6 +114,10 @@ public sealed class SemanticRouter
             System    = RouterSystemPrompt,
             Messages  = [LLMMessage.User(input)]
         }, ct);
+
+        modelSpan?.SetTag(GenAiConventions.InputTokens,  response.InputTokens);
+        modelSpan?.SetTag(GenAiConventions.OutputTokens, response.OutputTokens);
+        _usage.Record(response.Model ?? RouterModel, response.InputTokens, response.OutputTokens);
 
         var rawJson = response.Text
             ?? throw new InvalidOperationException("Router retornou resposta vazia.");

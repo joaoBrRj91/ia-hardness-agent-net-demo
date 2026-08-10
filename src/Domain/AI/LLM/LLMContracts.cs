@@ -47,6 +47,13 @@ public sealed record LLMResponse
     public required string                    StopReason { get; init; }
     public required IReadOnlyList<LLMContent> Content    { get; init; }
 
+    /// <summary>Modelo que efetivamente respondeu; null quando o provider não informa.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>Tokens consumidos/produzidos nesta chamada. 0 = desconhecido.</summary>
+    public int InputTokens  { get; init; }
+    public int OutputTokens { get; init; }
+
     public string?                 Text     => Content.OfType<LLMText>().FirstOrDefault()?.Text;
     public IEnumerable<LLMToolUse> ToolUses => Content.OfType<LLMToolUse>();
 }

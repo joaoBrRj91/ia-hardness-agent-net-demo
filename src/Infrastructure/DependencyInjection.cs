@@ -10,12 +10,14 @@ using Infrastructure.AI.Authorization;
 using Infrastructure.AI.Harness;
 using Infrastructure.AI.LLM;
 using Infrastructure.AI.Mcp;
+using Infrastructure.AI.Observability;
 using Infrastructure.AI.RAG;
 using Infrastructure.AI.Routing;
 using Infrastructure.AI.Routing.Handlers;
 using Infrastructure.AI.Tools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure;
@@ -101,6 +103,12 @@ public static class ServiceCollectionExtensions
 
         // ── Módulo 3.3 — MCP Client ───────────────────────────────────────
         services.AddScoped<McpHostService>();
+
+        // ── Módulo 6.1 — hooks de observabilidade (defaults seguros) ─────
+        // Agentes dependem de ambos; sem AddAIObservability o NoOp mantém
+        // tudo funcional e o ActivitySource global quieto (testes paralelos).
+        services.AddScoped<TokenUsageAccumulator>();
+        services.TryAddSingleton<IAgentDiagnostics, NoOpAgentDiagnostics>();
 
         return services;
     }

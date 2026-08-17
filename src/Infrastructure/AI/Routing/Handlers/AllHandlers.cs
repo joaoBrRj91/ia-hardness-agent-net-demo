@@ -2,6 +2,7 @@ using Domain.AI.LLM;
 using Domain.AI.Routing;
 using Domain.AI.Tools;
 using Infrastructure.AI.Agents;
+using Infrastructure.AI.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.AI.Routing.Handlers;
@@ -80,13 +81,23 @@ public sealed class AnalyzeHandler : IAgentHandler
 /// </summary>
 public sealed class SummarizeHandler : IAgentHandler
 {
+    private const string Model = "claude-haiku-4-5-20251001";
+
     private readonly ILLMClient                _client;
+    private readonly IAgentDiagnostics         _diagnostics;
+    private readonly TokenUsageAccumulator     _usage;
     private readonly ILogger<SummarizeHandler> _logger;
 
-    public SummarizeHandler(ILLMClient client, ILogger<SummarizeHandler> logger)
+    public SummarizeHandler(
+        ILLMClient                client,
+        IAgentDiagnostics         diagnostics,
+        TokenUsageAccumulator     usage,
+        ILogger<SummarizeHandler> logger)
     {
-        _client = client;
-        _logger = logger;
+        _client      = client;
+        _diagnostics = diagnostics;
+        _usage       = usage;
+        _logger      = logger;
     }
 
     public string HandlerName         => "SummarizeHandler";
@@ -99,15 +110,23 @@ public sealed class SummarizeHandler : IAgentHandler
         ToolExecutionContext context,
         CancellationToken    ct = default)
     {
-        var response = await _client.CompleteAsync(new LLMRequest
+        string output;
+        using (var modelSpan = _diagnostics.StartModelCall(Model, 1024))
         {
-            Model     = "claude-haiku-4-5-20251001",
-            MaxTokens = 1024,
-            System    = "Você é um assistente de resumo de operações PSP. Seja conciso e objetivo.",
-            Messages  = [LLMMessage.User(input)]
-        }, ct);
+            var response = await _client.CompleteAsync(new LLMRequest
+            {
+                Model     = Model,
+                MaxTokens = 1024,
+                System    = "Você é um assistente de resumo de operações PSP. Seja conciso e objetivo.",
+                Messages  = [LLMMessage.User(input)]
+            }, ct);
 
-        var output = response.Text ?? "Resumo indisponível.";
+            modelSpan?.SetTag(GenAiConventions.InputTokens,  response.InputTokens);
+            modelSpan?.SetTag(GenAiConventions.OutputTokens, response.OutputTokens);
+            _usage.Record(response.Model ?? Model, response.InputTokens, response.OutputTokens);
+
+            output = response.Text ?? "Resumo indisponível.";
+        }
 
         return new RoutedResponse
         {

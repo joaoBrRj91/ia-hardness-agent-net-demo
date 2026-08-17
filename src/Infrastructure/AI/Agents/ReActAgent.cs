@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Domain.AI.Agents;
 using Domain.AI.LLM;
 using Domain.AI.Tools;
+using Infrastructure.AI.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.AI.Agents;
@@ -21,6 +23,8 @@ public sealed class ReActAgent
     private readonly IToolRegistry            _registry;
     private readonly IToolAuthorizationService _authService;
     private readonly IAgentObserver           _observer;
+    private readonly IAgentDiagnostics        _diagnostics;
+    private readonly TokenUsageAccumulator    _usage;
     private readonly ILogger<ReActAgent>      _logger;
 
     private const string Model         = "claude-sonnet-4-6";
@@ -46,12 +50,16 @@ public sealed class ReActAgent
         IToolRegistry             registry,
         IToolAuthorizationService authService,
         IAgentObserver            observer,
+        IAgentDiagnostics         diagnostics,
+        TokenUsageAccumulator     usage,
         ILogger<ReActAgent>       logger)
     {
         _client      = client;
         _registry    = registry;
         _authService = authService;
         _observer    = observer;
+        _diagnostics = diagnostics;
+        _usage       = usage;
         _logger      = logger;
     }
 
@@ -78,14 +86,28 @@ public sealed class ReActAgent
 
         for (int iter = 0; iter < MaxIterations && !state.IsComplete; iter++)
         {
-            var response = await _client.CompleteAsync(new LLMRequest
+            using var iterSpan = _diagnostics.StartIteration(iter);
+
+            LLMResponse response;
+            using (var modelSpan = _diagnostics.StartModelCall(Model, 4096))
             {
-                Model     = Model,
-                MaxTokens = 4096,
-                System    = SystemPrompt,
-                Tools     = tools.Count > 0 ? tools : null,
-                Messages  = messages
-            }, ct);
+                response = await _client.CompleteAsync(new LLMRequest
+                {
+                    Model     = Model,
+                    MaxTokens = 4096,
+                    System    = SystemPrompt,
+                    Tools     = tools.Count > 0 ? tools : null,
+                    Messages  = messages
+                }, ct);
+
+                modelSpan?.SetTag(GenAiConventions.InputTokens,   response.InputTokens);
+                modelSpan?.SetTag(GenAiConventions.OutputTokens,  response.OutputTokens);
+                modelSpan?.SetTag(GenAiConventions.ResponseModel, response.Model ?? Model);
+                modelSpan?.SetTag(GenAiConventions.FinishReasons, new[] { response.StopReason });
+
+                _usage.Record(response.Model ?? Model, response.InputTokens, response.OutputTokens);
+            }
+            // Dispose aqui → Activity.Current volta a ser iterSpan
 
             messages.Add(LLMMessage.Assistant(response.Content));
 
@@ -130,6 +152,8 @@ public sealed class ReActAgent
                 state = state.WithStep(actionStep);
                 await _observer.OnStepAsync(state, actionStep, ct);
 
+                using var toolSpan = _diagnostics.StartToolExecution(toolUse.Name);
+
                 // Camada 2: Defense-in-depth no dispatch
                 var authResult = _authService.Authorize(toolUse.Name, context);
 
@@ -137,6 +161,11 @@ public sealed class ReActAgent
 
                 if (!authResult.IsAuthorized)
                 {
+                    _diagnostics.RecordAuthzDenial(
+                        toolUse.Name,
+                        authResult.DenialReason ?? authResult.DeniedBy ?? "denied");
+                    toolSpan?.SetStatus(ActivityStatusCode.Error, "not_authorized");
+
                     observationContent = JsonSerializer.Serialize(new
                     {
                         error  = "not_authorized",
@@ -149,9 +178,12 @@ public sealed class ReActAgent
                     try
                     {
                         observationContent = await _registry.DispatchAsync(toolUse.Name, toolUse.Input, ct);
+                        _diagnostics.RecordToolResult(toolUse.Name, success: true);
                     }
                     catch (Exception ex)
                     {
+                        toolSpan?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                        _diagnostics.RecordToolResult(toolUse.Name, success: false);
                         _logger.LogError(ex, "Tool dispatch failed: {Tool}", toolUse.Name);
                         observationContent = JsonSerializer.Serialize(new
                         {

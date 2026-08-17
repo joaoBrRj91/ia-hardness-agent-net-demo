@@ -1,0 +1,143 @@
+# OTel Collector — tail sampling + retenção de traces anômalos.
+# Fonte: Docs/Features/Observability/MOD6-1-Collector-Tail-Sampling-Impl.md
+# Adaptações para o stack local:
+#   - backend genérico → Jaeger (traces), Prometheus (metrics), Loki (logs)
+#   - decision_wait 10s (produção: 60s — ver §4 da nota; 60s cobre o trace
+#     mais longo do harness: 10 iterações × ~4s. Local prioriza feedback rápido.)
+#   - sem camada de loadbalancing (réplica única — o invariante "todos os spans
+#     de um TraceId na mesma réplica" vale trivialmente)
+
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  # SEMPRE primeiro. Descarta antes de estourar heap do Collector.
+  # tail_sampling segura traces INTEIROS em RAM — sem isto, OOMKill.
+  # limit_mib (não percentage) local: percentage leria o total do cgroup da VM.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Segunda camada PCI (defense-in-depth com PaymentDataRedactor no processo).
+  # NOTA: atua sobre ATTRIBUTES de span/log; gen_ai.content.* vive em span
+  # EVENT — o redactor in-process é o controle primário para conteúdo.
+  attributes/redact:
+    actions:
+      - key: gen_ai.content.prompt
+        action: hash
+      - key: http.request.header.authorization
+        action: delete
+      - key: psp.user_id
+        action: hash
+
+  # ══════════════ O CORAÇÃO DA ESTRATÉGIA ══════════════
+  # Bufferiza TODOS os spans por TraceId durante decision_wait,
+  # depois avalia as policies contra o trace COMPLETO.
+  # Policies são OR: uma bater → trace inteiro retido.
+  tail_sampling:
+    decision_wait: 10s              # PRODUÇÃO: 60s mínimo (ver cabeçalho)
+    num_traces: 5000                # produção: 50000 — dimensione a RAM junto
+    expected_new_traces_per_sec: 50
+
+    policies:
+      # 1. Qualquer span com status Error
+      - name: erros
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+
+      # 2. Cauda de latência — o que o p99 esconde
+      - name: lentidao
+        type: latency
+        latency: { threshold_ms: 20000 }
+
+      # 3. Anomalia semântica: fallback, loop longo, contexto gigante, custo alto
+      - name: anomalia-semantica
+        type: string_attribute
+        string_attribute:
+          key: psp.ai.anomalous
+          values: ["true"]
+
+      # 4. SINAL DE SEGURANÇA: negação de autorização de tool.
+      #    Pico aqui = prompt injection barrado na camada 2.
+      #    Retenção 100% é requisito de AUDITORIA, não otimização.
+      - name: authz-negada
+        type: string_attribute
+        string_attribute:
+          key: psp.ai.authz_denied
+          values: ["true"]
+
+      # 5. Baseline: 10% do tráfego saudável, para ter p50 confiável
+      - name: baseline
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10 }
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+exporters:
+  # Traces → Jaeger (ingest OTLP nativo)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls: { insecure: true }
+    sending_queue:
+      enabled: true
+      storage: file_storage        # buffer em disco se o Jaeger cair
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+
+  # Métricas NÃO passam por tail_sampling — já são agregadas no processo.
+  # Prometheus faz scrape em :8889.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+  # Logs → endpoint OTLP nativo do Loki
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/buffer
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [file_storage, health_check]
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      # ORDEM IMPORTA: limiter → redact → sample → batch
+      processors: [memory_limiter, attributes/redact, tail_sampling, batch]
+      exporters:  [otlp/jaeger]
+
+    metrics:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [prometheus]
+
+    # Pipeline extra vs. a nota: logs do .NET chegam via OTLP e vão ao Loki
+    logs:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [otlphttp/loki]
+
+  telemetry:
+    # Métricas do próprio Collector — quem observa o observador.
+    # reader explícito em 0.0.0.0: o default (localhost:8888) não é alcançável
+    # pelo scrape do Prometheus a partir de outro container.
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888

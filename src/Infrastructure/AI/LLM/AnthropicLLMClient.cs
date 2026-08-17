@@ -27,8 +27,11 @@ internal sealed class AnthropicLLMClient : ILLMClient
 
         return new LLMResponse
         {
-            StopReason = response.StopReason ?? "end_turn",
-            Content    = response.Content.Select(ToDomainContent).OfType<LLMContent>().ToList()
+            StopReason   = response.StopReason ?? "end_turn",
+            Content      = response.Content.Select(ToDomainContent).OfType<LLMContent>().ToList(),
+            Model        = response.Model ?? request.Model,
+            InputTokens  = response.Usage?.InputTokens  ?? 0,
+            OutputTokens = response.Usage?.OutputTokens ?? 0
         };
     }
 

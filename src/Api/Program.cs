@@ -7,6 +7,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Módulo 4 — registra todo o pipeline agentic (RAG → Router → Agents → Harness).
 builder.Services.AddAIHarness(builder.Configuration);
 
+// Módulo 6.1 — telemetria (OTel). DEPOIS de AddAIHarness: o Decorate de
+// IAIHarness exige o registro original já existente.
+builder.Services.AddAIObservability(builder.Configuration);
+
 var app = builder.Build();
 
 app.MapGet("/", () => Results.Ok(new

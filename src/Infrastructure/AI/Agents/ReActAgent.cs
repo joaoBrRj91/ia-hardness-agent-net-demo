@@ -1,0 +1,227 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Domain.AI.Agents;
+using Domain.AI.LLM;
+using Domain.AI.Tools;
+using Infrastructure.AI.Observability;
+using Microsoft.Extensions.Logging;
+
+namespace Infrastructure.AI.Agents;
+
+/// <summary>
+/// ReAct Agent — loop Reason → Act → Observe explícito e auditável.
+///
+/// Diferenças vs AuthorizedToolOrchestrator (3.2):
+///   - AgentState é first-class citizen — não apenas List&lt;Message&gt;
+///   - Cada step é observável via IAgentObserver
+///   - Scratchpad estruturado: Thought / Action / Observation tipados
+///   - System prompt instrui o modelo a raciocinar antes de agir
+/// </summary>
+public sealed class ReActAgent
+{
+    private readonly ILLMClient               _client;
+    private readonly IToolRegistry            _registry;
+    private readonly IToolAuthorizationService _authService;
+    private readonly IAgentObserver           _observer;
+    private readonly IAgentDiagnostics        _diagnostics;
+    private readonly TokenUsageAccumulator    _usage;
+    private readonly ILogger<ReActAgent>      _logger;
+
+    private const string Model         = "claude-sonnet-4-6";
+    private const int    MaxIterations = 8;
+
+    // O bloco PROTOCOLO é a disciplina ReAct em si — genérico, não mexa ao
+    // adaptar o template. O bloco DOMÍNIO é o ponto de extensão: descreva ali
+    // as regras e convenções do seu domínio.
+    private static readonly string SystemPrompt = """
+        Você é um agente de operações que investiga e resolve solicitações usando as tools disponíveis.
+
+        PROTOCOLO OBRIGATÓRIO:
+        1. Antes de qualquer ação, raciocine explicitamente sobre o que você sabe e o que precisa descobrir.
+        2. Use tools para coletar evidências — nunca assuma dados que não foram confirmados.
+        3. Após cada resultado de tool, reflita sobre o que o resultado significa para o objetivo.
+        4. Quando tiver informações suficientes, entregue uma resposta final clara e estruturada.
+
+        DOMÍNIO:
+        - IDs de item seguem o padrão ITEM-XXXXXXXX
+        - Status possíveis de um item: active, pending, archived, locked
+        - Itens em status 'locked' não podem ser alterados
+        - Sempre confirme o status do item antes de recomendar uma ação que altere estado
+        """;
+
+    public ReActAgent(
+        ILLMClient                client,
+        IToolRegistry             registry,
+        IToolAuthorizationService authService,
+        IAgentObserver            observer,
+        IAgentDiagnostics         diagnostics,
+        TokenUsageAccumulator     usage,
+        ILogger<ReActAgent>       logger)
+    {
+        _client      = client;
+        _registry    = registry;
+        _authService = authService;
+        _observer    = observer;
+        _diagnostics = diagnostics;
+        _usage       = usage;
+        _logger      = logger;
+    }
+
+    public async Task<AgentState> RunAsync(
+        string               goal,
+        ToolExecutionContext context,
+        CancellationToken    ct = default)
+    {
+        var state = new AgentState
+        {
+            Goal     = goal,
+            TenantId = context.TenantId,
+            UserId   = context.UserId
+        };
+
+        // Camada 1: Visibilidade — LLM vê apenas tools autorizadas
+        var visibleTools = _authService.FilterVisible(_registry.GetDefinitions(), context);
+
+        var tools = visibleTools
+            .Select(t => new LLMToolDefinition(t.Name, t.Description, t.InputSchema))
+            .ToList();
+
+        var messages = new List<LLMMessage> { LLMMessage.User(goal) };
+
+        for (int iter = 0; iter < MaxIterations && !state.IsComplete; iter++)
+        {
+            using var iterSpan = _diagnostics.StartIteration(iter);
+
+            LLMResponse response;
+            using (var modelSpan = _diagnostics.StartModelCall(Model, 4096))
+            {
+                response = await _client.CompleteAsync(new LLMRequest
+                {
+                    Model     = Model,
+                    MaxTokens = 4096,
+                    System    = SystemPrompt,
+                    Tools     = tools.Count > 0 ? tools : null,
+                    Messages  = messages
+                }, ct);
+
+                modelSpan?.SetTag(GenAiConventions.InputTokens,   response.InputTokens);
+                modelSpan?.SetTag(GenAiConventions.OutputTokens,  response.OutputTokens);
+                modelSpan?.SetTag(GenAiConventions.ResponseModel, response.Model ?? Model);
+                modelSpan?.SetTag(GenAiConventions.FinishReasons, new[] { response.StopReason });
+
+                _usage.Record(response.Model ?? Model, response.InputTokens, response.OutputTokens);
+            }
+            // Dispose aqui → Activity.Current volta a ser iterSpan
+
+            messages.Add(LLMMessage.Assistant(response.Content));
+
+            // ── THOUGHT ──────────────────────────────────────────────────
+            var thoughtText = response.Text;
+
+            if (!string.IsNullOrWhiteSpace(thoughtText))
+            {
+                var thoughtStep = new AgentStep
+                {
+                    StepType = AgentStepType.Thought,
+                    Content  = thoughtText
+                };
+                state = state.WithStep(thoughtStep);
+                await _observer.OnStepAsync(state, thoughtStep, ct);
+            }
+
+            // ── FINAL ANSWER ──────────────────────────────────────────────
+            if (response.StopReason == "end_turn")
+            {
+                state = state.WithFinalAnswer(thoughtText ?? string.Empty);
+                await _observer.OnCompleteAsync(state, ct);
+                return state;
+            }
+
+            if (response.StopReason != "tool_use") break;
+
+            // ── ACTION + OBSERVATION ──────────────────────────────────────
+            var toolUseBlocks = response.ToolUses.ToList();
+            var toolResults   = new List<LLMToolResult>(toolUseBlocks.Count);
+
+            foreach (var toolUse in toolUseBlocks)
+            {
+                // Action step — auditável
+                var actionStep = new AgentStep
+                {
+                    StepType      = AgentStepType.Action,
+                    Content       = $"Chamando tool '{toolUse.Name}'",
+                    ToolName      = toolUse.Name,
+                    ToolInputJson = toolUse.Input?.ToJsonString()
+                };
+                state = state.WithStep(actionStep);
+                await _observer.OnStepAsync(state, actionStep, ct);
+
+                using var toolSpan = _diagnostics.StartToolExecution(toolUse.Name);
+
+                // Camada 2: Defense-in-depth no dispatch
+                var authResult = _authService.Authorize(toolUse.Name, context);
+
+                string observationContent;
+
+                if (!authResult.IsAuthorized)
+                {
+                    _diagnostics.RecordAuthzDenial(
+                        toolUse.Name,
+                        authResult.DenialReason ?? authResult.DeniedBy ?? "denied");
+                    toolSpan?.SetStatus(ActivityStatusCode.Error, "not_authorized");
+
+                    observationContent = JsonSerializer.Serialize(new
+                    {
+                        error  = "not_authorized",
+                        reason = authResult.DenialReason,
+                        tool   = toolUse.Name
+                    });
+                }
+                else
+                {
+                    try
+                    {
+                        observationContent = await _registry.DispatchAsync(toolUse.Name, toolUse.Input, ct);
+                        _diagnostics.RecordToolResult(toolUse.Name, success: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        toolSpan?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                        _diagnostics.RecordToolResult(toolUse.Name, success: false);
+                        _logger.LogError(ex, "Tool dispatch failed: {Tool}", toolUse.Name);
+                        observationContent = JsonSerializer.Serialize(new
+                        {
+                            error   = "execution_failed",
+                            tool    = toolUse.Name,
+                            message = "Erro interno ao executar a tool."
+                        });
+                    }
+                }
+
+                // Observation step — resultado re-injetado no contexto
+                var observationStep = new AgentStep
+                {
+                    StepType = AgentStepType.Observation,
+                    Content  = observationContent,
+                    ToolName = toolUse.Name
+                };
+                state = state.WithStep(observationStep);
+                await _observer.OnStepAsync(state, observationStep, ct);
+
+                toolResults.Add(new LLMToolResult(toolUse.Id, observationContent));
+            }
+
+            messages.Add(LLMMessage.ToolResults(toolResults));
+        }
+
+        // Circuit breaker — MaxIterations atingido
+        if (!state.IsComplete)
+        {
+            const string timeout = "Agente não convergiu dentro do limite de iterações.";
+            state = state.WithFinalAnswer(timeout);
+            await _observer.OnCompleteAsync(state, ct);
+        }
+
+        return state;
+    }
+}

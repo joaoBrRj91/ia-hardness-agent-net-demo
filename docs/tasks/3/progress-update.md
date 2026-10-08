@@ -1,7 +1,7 @@
 # Progresso — #3
 
-Próxima ação: Passo 3 · 3.1 · red
-Escopo original: 6/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
+Próxima ação: Passo 4 · 4.1 · red
+Escopo original: 7/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
 
 <!--
 Status de subtask: pending | red | green | done | blocked
@@ -19,8 +19,8 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - [x] 2.3 CorrelationId informado é preservado · AIHarnessLoggingTests.Preserves_provided_correlation_id · done
 - [x] 2.4 Log [Harness] ERROR fica dentro do scope · AIHarnessLoggingTests.Error_log_is_inside_scope · done
 
-## Passo 3 — Warning no circuit breaker do ReAct · pending
-- [ ] 3.1 Warning único ao atingir MaxIterations · ReActAgentLoggingTests.Logs_warning_when_max_iterations_reached · pending
+## Passo 3 — Warning no circuit breaker do ReAct · done
+- [x] 3.1 Warning único ao atingir MaxIterations · ReActAgentLoggingTests.Logs_warning_when_max_iterations_reached · done
 
 ## Passo 4 — Warning para StopReason inesperado · pending
 - [ ] 4.1 Um único Warning com stopReason, sem Warning de MaxIterations · ReActAgentLoggingTests.Logs_single_warning_for_unexpected_stop_reason · pending
@@ -40,3 +40,4 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - 2026-10-08 · — · Plano aprovado; branch feat/3-logs-estruturados criada.
 - 2026-10-08 · — · 1.2: o teste já passava antes de `public partial class Program;` (Mvc.Testing expõe o Program internal); red não observável, linha adicionada conforme o plano.
 - 2026-10-08 · 97d3001 · Passo 1 concluído (1.1, 1.2).
+- 2026-10-08 · 4367eda · Passo 2 concluído (2.1-2.4).

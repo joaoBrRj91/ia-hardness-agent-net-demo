@@ -83,6 +83,7 @@ public sealed class ReActAgent
             .ToList();
 
         var messages = new List<LLMMessage> { LLMMessage.User(goal) };
+        var stoppedUnexpectedly = false;
 
         for (int iter = 0; iter < MaxIterations && !state.IsComplete; iter++)
         {
@@ -133,7 +134,16 @@ public sealed class ReActAgent
                 return state;
             }
 
-            if (response.StopReason != "tool_use") break;
+            if (response.StopReason != "tool_use")
+            {
+                // Saída sem convergir por motivo que não é o limite de iterações
+                // (ex.: max_tokens). Um único Warning aqui; o do circuit breaker é suprimido.
+                _logger.LogWarning(
+                    "[ReAct] StopReason inesperado | stopReason={StopReason} iteration={Iteration}",
+                    response.StopReason, iter);
+                stoppedUnexpectedly = true;
+                break;
+            }
 
             // ── ACTION + OBSERVATION ──────────────────────────────────────
             var toolUseBlocks = response.ToolUses.ToList();
@@ -213,9 +223,10 @@ public sealed class ReActAgent
         // Circuit breaker — MaxIterations atingido
         if (!state.IsComplete)
         {
-            _logger.LogWarning(
-                "[ReAct] MaxIterations atingido | maxIterations={MaxIterations} steps={Steps}",
-                MaxIterations, state.Steps.Count);
+            if (!stoppedUnexpectedly)
+                _logger.LogWarning(
+                    "[ReAct] MaxIterations atingido | maxIterations={MaxIterations} steps={Steps}",
+                    MaxIterations, state.Steps.Count);
 
             const string timeout = "Agente não convergiu dentro do limite de iterações.";
             state = state.WithFinalAnswer(timeout);

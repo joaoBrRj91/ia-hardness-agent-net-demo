@@ -50,4 +50,31 @@ public class ReActAgentLoggingTests
         Assert.Equal(8, warning.Properties["MaxIterations"]);
         Assert.Contains("Agente não convergiu", run.FinalAnswer);
     }
+
+    [Fact]
+    public async Task Logs_single_warning_for_unexpected_stop_reason()
+    {
+        var (_, logs) = await RunAsync(new LLMResponse
+        {
+            StopReason = "max_tokens",
+            Content    = [new LLMText("resposta truncada")]
+        });
+
+        var warning = Assert.Single(logs, l => l.Level == LogLevel.Warning);
+        Assert.StartsWith("[ReAct] StopReason inesperado", warning.Message);
+        Assert.Equal("max_tokens", warning.Properties["StopReason"]);
+        Assert.DoesNotContain(logs, l => l.Message.Contains("MaxIterations atingido"));
+    }
+
+    [Fact]
+    public async Task End_turn_logs_no_warning()
+    {
+        var (_, logs) = await RunAsync(new LLMResponse
+        {
+            StopReason = "end_turn",
+            Content    = [new LLMText("pronto")]
+        });
+
+        Assert.DoesNotContain(logs, l => l.Level >= LogLevel.Warning);
+    }
 }

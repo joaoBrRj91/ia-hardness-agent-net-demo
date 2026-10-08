@@ -45,14 +45,14 @@ descrita abaixo.
 
 A spec foi escrita contra uma API mais antiga; ajustes feitos para a versão atual:
 
-| Spec original            | Código atual (SDK 5.10.0)                                        |
-|--------------------------|-----------------------------------------------------------------|
-| `System = "prompt"`      | `System = [new SystemMessage("prompt")]`                        |
-| `TextBlock`              | `TextContent`                                                   |
-| `ToolUseBlock`           | `ToolUseContent`                                                |
-| `ToolResultBlock`        | `ToolResultContent` (`Content` é `List<ContentBase>`, sem `IsError`) |
-| `new Tool { InputSchema }` | `new Common.Tool(new Common.Function(name, desc, jsonSchema))` |
-| `new AnthropicClient(key)` | `new AnthropicClient(new APIAuthentication(key))`             |
+| Spec original              | Código atual (SDK 5.10.0)                                            |
+| -------------------------- | -------------------------------------------------------------------- |
+| `System = "prompt"`        | `System = [new SystemMessage("prompt")]`                             |
+| `TextBlock`                | `TextContent`                                                        |
+| `ToolUseBlock`             | `ToolUseContent`                                                     |
+| `ToolResultBlock`          | `ToolResultContent` (`Content` é `List<ContentBase>`, sem `IsError`) |
+| `new Tool { InputSchema }` | `new Common.Tool(new Common.Function(name, desc, jsonSchema))`       |
+| `new AnthropicClient(key)` | `new AnthropicClient(new APIAuthentication(key))`                    |
 
 ## Como rodar
 
@@ -80,12 +80,12 @@ dotnet run --project src/Api
 docker compose up -d --build
 ```
 
-| Serviço     | URL                                | Credenciais |
-|-------------|-------------------------------------|-------------|
-| API         | http://localhost:8080               | —           |
-| Grafana     | http://localhost:3000               | admin/admin |
-| Jaeger UI   | http://localhost:16686              | —           |
-| Prometheus  | http://localhost:9090               | —           |
+| Serviço    | URL                    | Credenciais |
+| ---------- | ---------------------- | ----------- |
+| API        | http://localhost:8080  | —           |
+| Grafana    | http://localhost:3000  | admin/admin |
+| Jaeger UI  | http://localhost:16686 | —           |
+| Prometheus | http://localhost:9090  | —           |
 
 Roda com `LLM_USE_FAKE=true` por padrão (offline, sem custo). Copie `.env.example` para
 `.env` e defina `LLM_USE_FAKE=false` + `ANTHROPIC_API_KEY` para exercitar chamadas reais
@@ -93,11 +93,11 @@ ao modelo com telemetria completa.
 
 ### Endpoints
 
-| Método | Rota        | Descrição                                  |
-|--------|-------------|--------------------------------------------|
-| GET    | `/`         | Metadados do serviço                       |
-| GET    | `/health`   | Health check                               |
-| POST   | `/harness`  | Entry point agentic (RAG → Router → Agent) |
+| Método | Rota       | Descrição                                  |
+| ------ | ---------- | ------------------------------------------ |
+| GET    | `/`        | Metadados do serviço                       |
+| GET    | `/health`  | Health check                               |
+| POST   | `/harness` | Entry point agentic (RAG → Router → Agent) |
 
 Exemplo:
 
@@ -147,20 +147,25 @@ Suba a stack local com `docker compose up -d --build` (ver seção acima).
 
 ```jsonc
 {
-  "Anthropic": { "ApiKey": "" },              // vazio → usa ANTHROPIC_API_KEY
+  "Anthropic": { "ApiKey": "" }, // vazio → usa ANTHROPIC_API_KEY
   "LLM": { "UseFake": true, "FakeScenario": "reflection-refinement" }, // offline, sem custo
-  "AllowedTenants": [ "tenant-demo", "acme" ], // isolamento multi-tenant
+  "AllowedTenants": ["tenant-demo", "acme"], // isolamento multi-tenant
   "RateLimit": { "ToolCallsPerMinute": 30 },
   "Otel": { "Endpoint": "http://localhost:4317" },
   "AI": {
     "Telemetry": {
-      "RecordContent": false,                 // nunca true em produção sem revisão de compliance
+      "RecordContent": false, // nunca true em produção sem revisão de compliance
       "MaxContentLength": 2000,
       "DefaultModel": "claude-sonnet-4-6",
-      "CostAlertThresholdUsd": 0.50,
-      "Pricing": { "claude-sonnet-4-6": { "InputPerMillion": 0.0, "OutputPerMillion": 0.0 } }
-    }
-  }
+      "CostAlertThresholdUsd": 0.5,
+      "Pricing": {
+        "claude-sonnet-4-6": {
+          "InputPerMillion": 0.0,
+          "OutputPerMillion": 0.0,
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -174,13 +179,13 @@ ponta a ponta, offline e sem API key.
 A arquitetura em si não precisa mudar. Para plugar um domínio real, mexa apenas nestes pontos —
 todos marcados com `PONTO DE EXTENSÃO` no código:
 
-| # | Arquivo | O que trocar |
-|---|---|---|
-| 1 | `Infrastructure/AI/Tools/DemoTools.cs` | Substitua pelas suas `IToolDefinition` + `IToolHandler`. Mantenha ao menos uma tool com `IsMutating = true`, senão `ReadOnlyPolicy` e a trilha `app.ai.authz_denied` viram código morto. |
-| 2 | `Infrastructure/AI/Tools/DemoToolsRegistration.cs` | Registre as suas tools. É a **única** linha de `AddAIHarness()` acoplada ao domínio. |
-| 3 | `Infrastructure/AI/RAG/RagPromptEnricher.cs` | Troque `KnowledgeBase` pelos seus chunks (ou por um vector store) e `EntityIdRegex()` pelo padrão de ID do seu domínio. |
-| 4 | Prompts dos agentes | Bloco `DOMÍNIO` em `ReActAgent.cs`, os prompts de generator/critic em `ReflectionAgent.cs` e a lista de intents em `SemanticRouter.cs`. O protocolo ReAct e o schema JSON do critic são estruturais — não mexa neles. |
-| 5 | `Infrastructure/AI/LLM/FakeScenarios.cs` | Reescreva os três cenários offline contra as suas tools. O `Name` de cada `LLMToolUse` precisa casar com um `IToolDefinition.Name` registrado. |
+| #   | Arquivo                                            | O que trocar                                                                                                                                                                                                          |
+| --- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `Infrastructure/AI/Tools/DemoTools.cs`             | Substitua pelas suas `IToolDefinition` + `IToolHandler`. Mantenha ao menos uma tool com `IsMutating = true`, senão `ReadOnlyPolicy` e a trilha `app.ai.authz_denied` viram código morto.                              |
+| 2   | `Infrastructure/AI/Tools/DemoToolsRegistration.cs` | Registre as suas tools. É a **única** linha de `AddAIHarness()` acoplada ao domínio.                                                                                                                                  |
+| 3   | `Infrastructure/AI/RAG/RagPromptEnricher.cs`       | Troque `KnowledgeBase` pelos seus chunks (ou por um vector store) e `EntityIdRegex()` pelo padrão de ID do seu domínio.                                                                                               |
+| 4   | Prompts dos agentes                                | Bloco `DOMÍNIO` em `ReActAgent.cs`, os prompts de generator/critic em `ReflectionAgent.cs` e a lista de intents em `SemanticRouter.cs`. O protocolo ReAct e o schema JSON do critic são estruturais — não mexa neles. |
+| 5   | `Infrastructure/AI/LLM/FakeScenarios.cs`           | Reescreva os três cenários offline contra as suas tools. O `Name` de cada `LLMToolUse` precisa casar com um `IToolDefinition.Name` registrado.                                                                        |
 
 Além disso, se quiser um namespace de telemetria próprio, renomeie o prefixo `app.` em
 `GenAiConventions.cs` — e lembre de atualizar **junto** os valores duplicados em
@@ -203,13 +208,14 @@ seu `TargetIntent` e o seu `ConfidenceThreshold`, e citá-lo no prompt do router
   (`FakeScenarios.cs`) para testar o pipeline sem chamadas reais; `AnthropicLLMClient` fala
   com a API real. Cenários disponíveis via `LLM:FakeScenario`:
 
-  | Cenário | Como exercitar | O que demonstra |
-  |---|---|---|
-  | `react-tool-call` | `forceIntent: "investigate"` | Loop ReAct completo: Thought → Action (`lookup_item`) → Observation → resposta final |
-  | `react-authz-denied` | `forceIntent: "investigate"` + `readOnlyMode: true` | `ReadOnlyPolicy` bloqueando `update_item` no dispatch; o agente lê a negação e encerra sem mutar estado (tag `app.ai.authz_denied`) |
-  | `reflection-refinement` | `forceIntent: "analyze"` | Loop generator/critic: draft vago (score 0.42) → refinado e aceito (score 0.91) |
+  | Cenário                 | Como exercitar                                      | O que demonstra                                                                                                                     |
+  | ----------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+  | `react-tool-call`       | `forceIntent: "investigate"`                        | Loop ReAct completo: Thought → Action (`lookup_item`) → Observation → resposta final                                                |
+  | `react-authz-denied`    | `forceIntent: "investigate"` + `readOnlyMode: true` | `ReadOnlyPolicy` bloqueando `update_item` no dispatch; o agente lê a negação e encerra sem mutar estado (tag `app.ai.authz_denied`) |
+  | `reflection-refinement` | `forceIntent: "analyze"`                            | Loop generator/critic: draft vago (score 0.42) → refinado e aceito (score 0.91)                                                     |
 
   Sem cenário na fila, o `FakeLLMClient` responde por papel, identificando router e critic
   pelos marcadores de `PromptMarkers` — o que mantém o roteamento semântico testável offline.
+
 - A stack de observabilidade é opt-in e local/dev-safe: `RecordContent=false` por padrão,
   redação em duas camadas (aplicação + Collector), e todo custo de modelo é zero no modo fake.

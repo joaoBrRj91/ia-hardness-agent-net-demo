@@ -213,6 +213,10 @@ public sealed class ReActAgent
         // Circuit breaker — MaxIterations atingido
         if (!state.IsComplete)
         {
+            _logger.LogWarning(
+                "[ReAct] MaxIterations atingido | maxIterations={MaxIterations} steps={Steps}",
+                MaxIterations, state.Steps.Count);
+
             const string timeout = "Agente não convergiu dentro do limite de iterações.";
             state = state.WithFinalAnswer(timeout);
             await _observer.OnCompleteAsync(state, ct);

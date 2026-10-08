@@ -1,0 +1,13 @@
+{
+  "ticket": null,
+  "phase": "ticket",
+  "nextPhase": null,
+  "waitingFor": null,
+  "blockingQuestions": [],
+  "assumptions": [],
+  "artifacts": {},
+  "reviewRound": 0,
+  "prUrl": null,
+  "processedComments": [],
+  "updatedAt": null
+}

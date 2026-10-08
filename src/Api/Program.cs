@@ -1,6 +1,7 @@
 using Domain.AI.Harness;
 using Domain.AI.Tools;
 using Infrastructure;
+using Infrastructure.AI.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapPost("/harness", async (
     HarnessRequestDto  dto,
     IAIHarness         harness,
+    ILogger<Program>   logger,
     CancellationToken  ct) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Input))
@@ -54,11 +56,17 @@ app.MapPost("/harness", async (
     catch (InvalidOperationException ex)
     {
         // Ex: configuração ausente (API key) ou resposta vazia do provider.
+        // O scope do AIHarness já foi descartado: reabre com os dados do request.
+        // Sem CorrelationId informado, a ligação com o id gerado é pelo trace_id.
+        using var logScope = HarnessLogScope.Begin(logger, dto.CorrelationId, dto.TenantId, dto.UserId);
+        logger.LogError(ex, "[Api] Configuração inválida | status={Status}", 500);
         return Results.Problem(title: "Configuração inválida", detail: ex.Message, statusCode: 500);
     }
     catch (HttpRequestException ex)
     {
         // Falha na chamada ao provider LLM (billing, rate limit, indisponibilidade).
+        using var logScope = HarnessLogScope.Begin(logger, dto.CorrelationId, dto.TenantId, dto.UserId);
+        logger.LogError(ex, "[Api] Falha no provedor LLM | status={Status}", 502);
         return Results.Problem(title: "Falha no provedor LLM", detail: ex.Message, statusCode: 502);
     }
 });

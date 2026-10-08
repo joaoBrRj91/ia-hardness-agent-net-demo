@@ -1,6 +1,6 @@
 {
   "ticket": "#3",
-  "phase": "pr",
+  "phase": "closed",
   "nextPhase": null,
   "waitingFor": null,
   "blockingQuestions": [],
@@ -21,9 +21,17 @@
     "plan": "docs/tasks/3/03-plano.md",
     "progress": "docs/tasks/3/progress-update.md"
   },
-  "branch": "feat/3-logs-estruturados",
+  "branch": "feat/3-logs-estruturados-rebased",
   "reviewRound": 1,
-  "prUrl": null,
-  "processedComments": [],
+  "prUrl": "https://github.com/joaoBrRj91/ia-hardness-agent-net-demo/pull/4",
+  "processedComments": [
+    {
+      "id": "6070514741",
+      "author": "joaoBrRj91",
+      "type": "Muda o plano",
+      "decision": "recusado",
+      "subtask": null
+    }
+  ],
   "updatedAt": "2026-10-08"
 }

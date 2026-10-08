@@ -34,16 +34,16 @@ public class HarnessEndpointLoggingTests
     [Fact]
     public async Task Llm_http_failure_returns_502_and_logs_error()
     {
-        var logs    = new CapturingLoggerProvider();
+        var logs = new CapturingLoggerProvider();
         var failure = new HttpRequestException("provider down");
         await using var factory = CreateFactory(failure, logs);
 
         var response = await factory.CreateClient().PostAsJsonAsync("/harness", new
         {
-            input          = "olá",
-            tenantId       = "tenant-demo",
-            userId         = "user-42",
-            correlationId  = "corr-http",
+            input = "olá",
+            tenantId = "tenant-demo",
+            userId = "user-42",
+            correlationId = "corr-http",
             skipEnrichment = true
         });
 
@@ -52,23 +52,23 @@ public class HarnessEndpointLoggingTests
         Assert.Same(failure, error.Exception);
         Assert.StartsWith("[Api] Falha no provedor LLM", error.Message);
         Assert.Equal("tenant-demo", error.Scope[GenAiConventions.TenantId]);
-        Assert.Equal("user-42",     error.Scope[GenAiConventions.UserId]);
-        Assert.Equal("corr-http",   error.Scope[GenAiConventions.CorrelationId]);
+        Assert.Equal("user-42", error.Scope[GenAiConventions.UserId]);
+        Assert.Equal("corr-http", error.Scope[GenAiConventions.CorrelationId]);
     }
 
     [Fact]
     public async Task Invalid_operation_returns_500_and_logs_error()
     {
-        var logs    = new CapturingLoggerProvider();
+        var logs = new CapturingLoggerProvider();
         var failure = new InvalidOperationException("config ausente");
         await using var factory = CreateFactory(failure, logs);
 
         var response = await factory.CreateClient().PostAsJsonAsync("/harness", new
         {
-            input          = "olá",
-            tenantId       = "tenant-demo",
-            userId         = "user-42",
-            correlationId  = "corr-500",
+            input = "olá",
+            tenantId = "tenant-demo",
+            userId = "user-42",
+            correlationId = "corr-500",
             skipEnrichment = true
         });
 
@@ -87,9 +87,9 @@ public class HarnessEndpointLoggingTests
 
         var response = await factory.CreateClient().PostAsJsonAsync("/harness", new
         {
-            input          = "olá",
-            tenantId       = "tenant-demo",
-            userId         = "user-42",
+            input = "olá",
+            tenantId = "tenant-demo",
+            userId = "user-42",
             skipEnrichment = true
         });
 
@@ -97,6 +97,6 @@ public class HarnessEndpointLoggingTests
         var error = ProgramError(logs);
         Assert.False(error.Scope.ContainsKey(GenAiConventions.CorrelationId));
         Assert.Equal("tenant-demo", error.Scope[GenAiConventions.TenantId]);
-        Assert.Equal("user-42",     error.Scope[GenAiConventions.UserId]);
+        Assert.Equal("user-42", error.Scope[GenAiConventions.UserId]);
     }
 }

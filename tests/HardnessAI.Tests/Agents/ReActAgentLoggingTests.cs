@@ -27,7 +27,7 @@ public class ReActAgentLoggingTests
     private static async Task<(AgentRun Run, IReadOnlyList<CapturedLog> Logs)> RunAsync(
         params LLMResponse[] responses)
     {
-        using var host  = new HarnessTestHost();
+        using var host = new HarnessTestHost();
         using var scope = host.CreateScope();
         scope.ServiceProvider.GetRequiredService<FakeLLMClient>().Enqueue(responses);
         var agent = scope.ServiceProvider.GetRequiredService<ReActAgent>();
@@ -57,7 +57,7 @@ public class ReActAgentLoggingTests
         var (_, logs) = await RunAsync(new LLMResponse
         {
             StopReason = "max_tokens",
-            Content    = [new LLMText("resposta truncada")]
+            Content = [new LLMText("resposta truncada")]
         });
 
         var warning = Assert.Single(logs, l => l.Level == LogLevel.Warning);
@@ -72,7 +72,7 @@ public class ReActAgentLoggingTests
         var (_, logs) = await RunAsync(new LLMResponse
         {
             StopReason = "end_turn",
-            Content    = [new LLMText("pronto")]
+            Content = [new LLMText("pronto")]
         });
 
         Assert.DoesNotContain(logs, l => l.Level >= LogLevel.Warning);

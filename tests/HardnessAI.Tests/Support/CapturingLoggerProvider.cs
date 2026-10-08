@@ -5,10 +5,10 @@ namespace HardnessAI.Tests.Support;
 
 /// <summary>Um log capturado, com o snapshot dos scopes ativos no momento da chamada.</summary>
 public sealed record CapturedLog(
-    string                              Category,
-    LogLevel                            Level,
-    Exception?                          Exception,
-    string                              Message,
+    string Category,
+    LogLevel Level,
+    Exception? Exception,
+    string Message,
     IReadOnlyDictionary<string, object?> Properties,
     IReadOnlyDictionary<string, object?> Scope);
 

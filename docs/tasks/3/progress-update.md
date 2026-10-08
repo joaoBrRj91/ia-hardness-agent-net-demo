@@ -1,7 +1,7 @@
 # Progresso — #3
 
-Próxima ação: Passo 6 · 6.1 · verificação final (build, test, format)
-Escopo original: 12/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
+Próxima ação: nenhuma — plano concluído (13/13); aguardando revisão
+Escopo original: 13/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
 
 <!--
 Status de subtask: pending | red | green | done | blocked
@@ -31,8 +31,8 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - [x] 5.2 InvalidOperationException → 500 inalterado + log Error · HarnessEndpointLoggingTests.Invalid_operation_returns_500_and_logs_error · done
 - [x] 5.3 Sem CorrelationId informado, a chave é omitida do scope · HarnessEndpointLoggingTests.Omits_correlation_key_when_not_provided · done
 
-## Passo 6 — Verificação final · pending
-- [ ] 6.1 dotnet build, dotnet test e dotnet format --verify-no-changes verdes · (sem teste novo) · pending
+## Passo 6 — Verificação final · done
+- [x] 6.1 dotnet build, dotnet test e dotnet format --verify-no-changes verdes · (sem teste novo) · done
 
 ---
 
@@ -43,3 +43,5 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - 2026-10-08 · 4367eda · Passo 2 concluído (2.1-2.4).
 - 2026-10-08 · 91384b1 · Passo 3 concluído (3.1). 4.2 é regressão: já passava antes da implementação (red não observável).
 - 2026-10-08 · 807a5c3 · Passo 4 concluído (4.1, 4.2).
+- 2026-10-08 · 356cda6 · Passo 5 concluído (5.1-5.3).
+- 2026-10-08 · — · 6.1: dotnet build 0 erros/0 avisos; dotnet test 12/12 verdes. `dotnet format --verify-no-changes` já falhava no código original da base (alinhamento de colunas em src/, ~559 ocorrências, fora do escopo do ticket); formatados apenas os arquivos novos (tests/ e HarnessLogScope.cs). Pendência: base inteira não é format-clean.

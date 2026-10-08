@@ -15,10 +15,10 @@ public class AIHarnessLoggingTests
 
     private static HarnessRequest Request(string? correlationId) => new()
     {
-        Input          = "Investigue o item ITEM-00000003",
-        Context        = ToolExecutionContext.For("tenant-demo", "user-42", [], false),
-        ForceIntent    = "investigate",
-        CorrelationId  = correlationId,
+        Input = "Investigue o item ITEM-00000003",
+        Context = ToolExecutionContext.For("tenant-demo", "user-42", [], false),
+        ForceIntent = "investigate",
+        CorrelationId = correlationId,
         SkipEnrichment = true
     };
 
@@ -48,7 +48,7 @@ public class AIHarnessLoggingTests
         {
             Assert.Equal(response.CorrelationId, l.Scope[GenAiConventions.CorrelationId]);
             Assert.Equal("tenant-demo", l.Scope[GenAiConventions.TenantId]);
-            Assert.Equal("user-42",     l.Scope[GenAiConventions.UserId]);
+            Assert.Equal("user-42", l.Scope[GenAiConventions.UserId]);
         });
     }
 
@@ -81,8 +81,8 @@ public class AIHarnessLoggingTests
 
         var error = Assert.Single(host.Logs.Entries, l =>
             l.Level == LogLevel.Error && l.Message.StartsWith("[Harness] ERROR"));
-        Assert.Equal("corr-err",    error.Scope[GenAiConventions.CorrelationId]);
+        Assert.Equal("corr-err", error.Scope[GenAiConventions.CorrelationId]);
         Assert.Equal("tenant-demo", error.Scope[GenAiConventions.TenantId]);
-        Assert.Equal("user-42",     error.Scope[GenAiConventions.UserId]);
+        Assert.Equal("user-42", error.Scope[GenAiConventions.UserId]);
     }
 }

@@ -13,13 +13,13 @@ public static class HarnessLogScope
     public static IDisposable? Begin(
         ILogger logger,
         string? correlationId,
-        string  tenantId,
-        string  userId)
+        string tenantId,
+        string userId)
     {
         var state = new Dictionary<string, object?>
         {
             [GenAiConventions.TenantId] = tenantId,
-            [GenAiConventions.UserId]   = userId
+            [GenAiConventions.UserId] = userId
         };
 
         if (correlationId is not null)

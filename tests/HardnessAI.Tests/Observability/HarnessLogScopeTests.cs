@@ -19,13 +19,13 @@ public class HarnessLogScopeTests
             logger.LogInformation("without correlation");
 
         var with = Assert.Single(provider.Entries, e => e.Message == "with correlation");
-        Assert.Equal("corr-1",    with.Scope[GenAiConventions.CorrelationId]);
-        Assert.Equal("tenant-a",  with.Scope[GenAiConventions.TenantId]);
-        Assert.Equal("user-a",    with.Scope[GenAiConventions.UserId]);
+        Assert.Equal("corr-1", with.Scope[GenAiConventions.CorrelationId]);
+        Assert.Equal("tenant-a", with.Scope[GenAiConventions.TenantId]);
+        Assert.Equal("user-a", with.Scope[GenAiConventions.UserId]);
 
         var without = Assert.Single(provider.Entries, e => e.Message == "without correlation");
         Assert.False(without.Scope.ContainsKey(GenAiConventions.CorrelationId));
         Assert.Equal("tenant-a", without.Scope[GenAiConventions.TenantId]);
-        Assert.Equal("user-a",   without.Scope[GenAiConventions.UserId]);
+        Assert.Equal("user-a", without.Scope[GenAiConventions.UserId]);
     }
 }

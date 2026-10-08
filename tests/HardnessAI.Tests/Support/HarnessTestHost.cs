@@ -20,8 +20,8 @@ public sealed class HarnessTestHost : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["LLM:UseFake"]         = "true",
-                ["AllowedTenants:0"]    = "tenant-demo"
+                ["LLM:UseFake"] = "true",
+                ["AllowedTenants:0"] = "tenant-demo"
             })
             .Build();
 

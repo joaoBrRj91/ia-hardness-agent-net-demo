@@ -77,3 +77,6 @@ public sealed record HarnessRequestDto
     public          string?  CorrelationId  { get; init; }
     public          bool     SkipEnrichment { get; init; }
 }
+
+/// <summary>Expõe o entry point para WebApplicationFactory&lt;Program&gt; nos testes.</summary>
+public partial class Program;

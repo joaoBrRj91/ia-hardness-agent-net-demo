@@ -1,7 +1,7 @@
 # Progresso — #3
 
-Próxima ação: Passo 4 · 4.1 · red
-Escopo original: 7/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
+Próxima ação: Passo 5 · 5.1 · red
+Escopo original: 9/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
 
 <!--
 Status de subtask: pending | red | green | done | blocked
@@ -22,9 +22,9 @@ Grave este arquivo em red, green e done, nunca só no fim.
 ## Passo 3 — Warning no circuit breaker do ReAct · done
 - [x] 3.1 Warning único ao atingir MaxIterations · ReActAgentLoggingTests.Logs_warning_when_max_iterations_reached · done
 
-## Passo 4 — Warning para StopReason inesperado · pending
-- [ ] 4.1 Um único Warning com stopReason, sem Warning de MaxIterations · ReActAgentLoggingTests.Logs_single_warning_for_unexpected_stop_reason · pending
-- [ ] 4.2 end_turn não gera Warning (regressão) · ReActAgentLoggingTests.End_turn_logs_no_warning · pending
+## Passo 4 — Warning para StopReason inesperado · done
+- [x] 4.1 Um único Warning com stopReason, sem Warning de MaxIterations · ReActAgentLoggingTests.Logs_single_warning_for_unexpected_stop_reason · done
+- [x] 4.2 end_turn não gera Warning (regressão) · ReActAgentLoggingTests.End_turn_logs_no_warning · done
 
 ## Passo 5 — Error estruturado nas falhas 502 e 500 do /harness · pending
 - [ ] 5.1 HttpRequestException → 502 inalterado + log Error com exception e scope · HarnessEndpointLoggingTests.Llm_http_failure_returns_502_and_logs_error · pending
@@ -41,3 +41,4 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - 2026-10-08 · — · 1.2: o teste já passava antes de `public partial class Program;` (Mvc.Testing expõe o Program internal); red não observável, linha adicionada conforme o plano.
 - 2026-10-08 · 97d3001 · Passo 1 concluído (1.1, 1.2).
 - 2026-10-08 · 4367eda · Passo 2 concluído (2.1-2.4).
+- 2026-10-08 · 91384b1 · Passo 3 concluído (3.1). 4.2 é regressão: já passava antes da implementação (red não observável).

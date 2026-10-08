@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Domain.AI.Harness;
 using Domain.AI.RAG;
 using Domain.AI.Routing;
+using Infrastructure.AI.Observability;
 using Infrastructure.AI.Routing;
 using Microsoft.Extensions.Logging;
 
@@ -38,6 +39,11 @@ public sealed class AIHarness : IAIHarness
     {
         var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString("N")[..16];
         var sw            = Stopwatch.StartNew();
+
+        // Scope cobre o try/catch inteiro: todo log do request (inclusive de Router,
+        // ReAct e observer) herda correlation, tenant e user.
+        using var logScope = HarnessLogScope.Begin(
+            _logger, correlationId, request.Context.TenantId, request.Context.UserId);
 
         _logger.LogInformation(
             "[Harness] START | correlationId={Id} tenant={Tenant} userId={User} forceIntent={Force}",

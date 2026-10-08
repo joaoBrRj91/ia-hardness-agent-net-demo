@@ -1,7 +1,7 @@
 # Progresso — #3
 
-Próxima ação: Passo 2 · 2.1 · red
-Escopo original: 2/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
+Próxima ação: Passo 3 · 3.1 · red
+Escopo original: 6/13 done · Correções de revisão: 0/0 done · Review da PR: 0/0 done
 
 <!--
 Status de subtask: pending | red | green | done | blocked
@@ -13,11 +13,11 @@ Grave este arquivo em red, green e done, nunca só no fim.
 - [x] 1.1 Provider registra scopes ativos junto de cada log · CapturingLoggerProviderTests.Records_active_scope_pairs · done
 - [x] 1.2 Api sobe em teste e /health responde 200 (inclui `public partial class Program;`) · ProgramSmokeTests.Health_returns_200 · done
 
-## Passo 2 — Scope de log no AIHarness · pending
-- [ ] 2.1 Helper usa chaves de GenAiConventions e omite correlation nulo · HarnessLogScopeTests.Uses_GenAiConventions_keys_and_omits_null_correlation · pending
-- [ ] 2.2 Todos os logs do request carregam o correlationId gerado, tenant e user · AIHarnessLoggingTests.All_logs_carry_generated_correlation_id_in_scope · pending
-- [ ] 2.3 CorrelationId informado é preservado · AIHarnessLoggingTests.Preserves_provided_correlation_id · pending
-- [ ] 2.4 Log [Harness] ERROR fica dentro do scope · AIHarnessLoggingTests.Error_log_is_inside_scope · pending
+## Passo 2 — Scope de log no AIHarness · done
+- [x] 2.1 Helper usa chaves de GenAiConventions e omite correlation nulo · HarnessLogScopeTests.Uses_GenAiConventions_keys_and_omits_null_correlation · done
+- [x] 2.2 Todos os logs do request carregam o correlationId gerado, tenant e user · AIHarnessLoggingTests.All_logs_carry_generated_correlation_id_in_scope · done
+- [x] 2.3 CorrelationId informado é preservado · AIHarnessLoggingTests.Preserves_provided_correlation_id · done
+- [x] 2.4 Log [Harness] ERROR fica dentro do scope · AIHarnessLoggingTests.Error_log_is_inside_scope · done
 
 ## Passo 3 — Warning no circuit breaker do ReAct · pending
 - [ ] 3.1 Warning único ao atingir MaxIterations · ReActAgentLoggingTests.Logs_warning_when_max_iterations_reached · pending
@@ -39,3 +39,4 @@ Grave este arquivo em red, green e done, nunca só no fim.
 ## Registro
 - 2026-10-08 · — · Plano aprovado; branch feat/3-logs-estruturados criada.
 - 2026-10-08 · — · 1.2: o teste já passava antes de `public partial class Program;` (Mvc.Testing expõe o Program internal); red não observável, linha adicionada conforme o plano.
+- 2026-10-08 · 97d3001 · Passo 1 concluído (1.1, 1.2).

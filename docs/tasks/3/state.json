@@ -1,0 +1,29 @@
+{
+  "ticket": "#3",
+  "phase": "pr",
+  "nextPhase": null,
+  "waitingFor": null,
+  "blockingQuestions": [],
+  "assumptions": [
+    "Scope aberto em AIHarness após gerar o correlationId",
+    "Warning para circuit breaker e StopReason inesperado; Error para 502 e 500",
+    "Mensagens existentes não mudam; campos vêm do scope",
+    "Chaves do scope = GenAiConventions (app.correlation_id, app.tenant_id, app.user_id)",
+    "Um Warning por request no ReAct (flag stoppedUnexpectedly)",
+    "Program.cs abre o próprio scope; id gerado no AIHarness correlaciona via trace_id",
+    "Um projeto de teste tests/HardnessAI.Tests",
+    "Commits no formato <tipo>(#3): ..."
+  ],
+  "artifacts": {
+    "ticket": "docs/tasks/3/01-ticket.md",
+    "codebase": "docs/tasks/3/01b-codebase.md",
+    "analysis": "docs/tasks/3/02-analise.md",
+    "plan": "docs/tasks/3/03-plano.md",
+    "progress": "docs/tasks/3/progress-update.md"
+  },
+  "branch": "feat/3-logs-estruturados",
+  "reviewRound": 1,
+  "prUrl": null,
+  "processedComments": [],
+  "updatedAt": "2026-10-08"
+}
